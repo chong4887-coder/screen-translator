@@ -57,6 +57,8 @@ class FreeTranslator {
 }
 
 /** Claude: 장면을 보고 사람처럼 번역. API 키 필요 (쓴 만큼 요금) */
+private val REFUSAL = Regex("(죄송|번역할 수 없|번역하지 않|도와드릴 수 없|제공할 수 없|I can(?:no|')t|I'm unable|I won'?t)", RegexOption.IGNORE_CASE)
+
 class ClaudeTranslator(private val prefs: Prefs) {
     private val voices = LinkedHashMap<String, String>()   // 인물 → 말투 메모 (실행 중 유지)
 
@@ -120,7 +122,8 @@ class ClaudeTranslator(private val prefs: Prefs) {
         val answer = StringBuilder()
         for (i in 0 until out.length()) { val c = out.getJSONObject(i); if (c.optString("type") == "text") answer.append(c.optString("text")) }
         val map = parse(answer.toString())
-        todo.forEachIndexed { i, b -> map[i + 1]?.let { b.ko = it; Cache.put("claude|" + b.text, it) } }
+        // 번역 대신 거절·설명 문구가 온 칸은 번역 없음으로 처리 → 무료 번역이 채움 (캐시에도 넣지 않음)
+        todo.forEachIndexed { i, b -> map[i + 1]?.let { if (!REFUSAL.containsMatchIn(it)) { b.ko = it; Cache.put("claude|" + b.text, it) } } }
     }
 
     private fun parse(s: String): Map<Int, String> {

@@ -25,11 +25,6 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("sendImage", true)
         set(v) = sp.edit().putBoolean("sendImage", v).apply()
 
-    /** 스크롤 번역도 Claude로 할지 (끄면 스크롤 번역은 무료 번역) */
-    var scrollWithClaude: Boolean
-        get() = sp.getBoolean("scrollClaude", false)
-        set(v) = sp.edit().putBoolean("scrollClaude", v).apply()
-
     var memo: String
         get() = sp.getString("memo", "") ?: ""
         set(v) = sp.edit().putString("memo", v).apply()

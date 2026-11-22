@@ -31,7 +31,6 @@ class MainActivity : Activity() {
     private lateinit var key: EditText
     private lateinit var model: RadioGroup
     private lateinit var sendImage: CheckBox
-    private lateinit var scrollClaude: CheckBox
     private lateinit var memo: EditText
     private lateinit var status: TextView
 
@@ -46,7 +45,7 @@ class MainActivity : Activity() {
         fun note(t: String) = TextView(this).apply { text = t; textSize = 13f; setTextColor(Color.rgb(100, 100, 100)); setPadding(0, 0, 0, px(4)) }
 
         col.addView(title("화면 번역", 26f).apply { setPadding(0, 0, 0, px(4)) })
-        col.addView(note("다른 앱 위에 떠 있는 버튼으로 지금 보는 화면을 바로 번역해요.\n· 탭: 번역 (다시 탭하면 지우기)\n· 두 번 탭: Claude로 번역\n· 길게 누르기: 스크롤 번역 켜기/끄기 (화면이 멈출 때마다 자동 번역)\n· 끌어서 위치 옮기기"))
+        col.addView(note("다른 앱 위에 떠 있는 버튼으로 지금 보는 화면을 바로 번역해요.\n· 탭: 번역 (다시 탭하면 지우기)\n· 두 번 탭: Claude로 번역\n· 길게 누르기: 이 설정 화면 열기\n· 끌어서 위치 옮기기"))
 
         col.addView(title("기본 번역"))
         engine = RadioGroup(this)
@@ -69,8 +68,8 @@ class MainActivity : Activity() {
         model.check(if (prefs.model.contains("sonnet")) 202 else 201)
         col.addView(model)
         sendImage = CheckBox(this).apply { text = "화면 이미지도 같이 보내기 (장면을 보고 번역, 비용 조금 증가)"; isChecked = prefs.sendImage }
-        scrollClaude = CheckBox(this).apply { text = "스크롤 번역도 Claude로 (끄면 스크롤 번역은 무료)"; isChecked = prefs.scrollWithClaude }
-        col.addView(sendImage); col.addView(scrollClaude)
+        col.addView(sendImage)
+        col.addView(note("Claude가 번역하지 않는 부분(거절 등)은 자동으로 무료 번역으로 채워요."))
 
         col.addView(title("참고 메모 (Claude용, 선택)"))
         memo = EditText(this).apply { hint = "예: 주인공 이름은 렌, 히로인에겐 반말"; setText(prefs.memo); minLines = 2 }
@@ -98,7 +97,6 @@ class MainActivity : Activity() {
         prefs.apiKey = key.text.toString()
         prefs.model = if (model.checkedRadioButtonId == 202) "claude-sonnet-5-5" else "claude-haiku-5-5"
         prefs.sendImage = sendImage.isChecked
-        prefs.scrollWithClaude = scrollClaude.isChecked
         prefs.memo = memo.text.toString()
         if (prefs.engine == "claude" && !prefs.hasClaude) Toast.makeText(this, "API 키가 없어서 무료 번역으로 동작해요", Toast.LENGTH_LONG).show()
     }

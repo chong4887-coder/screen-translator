@@ -12,16 +12,17 @@
 - 떠 있는 버튼
   - 탭: 지금 화면 번역 (다시 탭하면 번역 지우기)
   - 두 번 탭: Claude로 번역 (API 키 필요)
-  - 길게 누르기: 스크롤 번역 켜기/끄기 — 스크롤하는 동안엔 번역을 숨기고, 멈추면 자동으로 다시 번역
+  - 길게 누르기: 설정 열기
   - 끌어서 위치 옮기기
 - 끄기: 알림의 **끄기** 또는 앱의 끄기 버튼
 
 ## 번역 방식
 - 무료: 구글 ML Kit 폰 내장 번역. 처음 한 번 언어 모델(각 약 30MB) 다운로드
 - Claude: 설정에 API 키(console.anthropic.com)를 넣으면 사용. 쓴 만큼 요금. 같은 문장은 다시 보내지 않음(캐시)
+- Claude가 번역하지 않은 부분(거절 등)은 자동으로 무료 번역으로 채움
 
 ## 구조
-- `TranslateService.kt` 화면 캡처(MediaProjection), 떠 있는 버튼, 스크롤 감지
+- `TranslateService.kt` 화면 캡처(MediaProjection), 떠 있는 버튼
 - `Ocr.kt` ML Kit 글자 인식(폰 안에서, 위치 정확), 세로쓰기 판단·문단 합치기·배경색
 - `Translators.kt` 무료/Claude 번역, 캐시
 - `OverlayView.kt` 글자 자리에 번역 그리기(원문 크기 맞춤, 세로/가로)

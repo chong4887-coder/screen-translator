@@ -34,18 +34,16 @@ import android.widget.TextView
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
  * 화면 번역 서비스
  *  - 떠 있는 동그란 버튼: 탭 = 지금 화면 번역(다시 탭하면 번역 지우기)
- *                          두 번 탭 = Claude로 번역, 길게 누르기 = 스크롤 번역 켜기/끄기
+ *                          두 번 탭 = Claude로 번역, 길게 누르기 = 설정 열기
  *  - 화면 위 투명한 층에 번역을 겹쳐 그림
  */
 class TranslateService : Service() {
@@ -73,8 +71,6 @@ class TranslateService : Service() {
     private val free = FreeTranslator()
     private lateinit var claude: ClaudeTranslator
     private var busy = false
-    private var scrollMode = false
-    private var scrollJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -91,7 +87,7 @@ class TranslateService : Service() {
             try { setupCapture(code, data) } catch (e: Exception) { toast("화면 캡처를 시작하지 못했어요: ${e.message}"); stopSelf(); return START_NOT_STICKY }
             addViews()
             running = true
-            toast("버튼을 탭하면 번역, 두 번 탭은 Claude, 길게 누르면 스크롤 번역")
+            toast("버튼을 탭하면 번역, 두 번 탭은 Claude, 길게 누르면 설정")
         }
         return START_NOT_STICKY
     }
@@ -104,7 +100,7 @@ class TranslateService : Service() {
         val n = Notification.Builder(this, "st")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentTitle("화면 번역 실행 중")
-            .setContentText("탭: 번역 · 두 번 탭: Claude · 길게: 스크롤 번역")
+            .setContentText("탭: 번역 · 두 번 탭: Claude · 길게: 설정")
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel), "끄기", stop).build())
             .setOngoing(true)
@@ -170,7 +166,7 @@ class TranslateService : Service() {
     private inner class BubbleTouch : View.OnTouchListener {
         private var downX = 0f; private var downY = 0f; private var startX = 0; private var startY = 0
         private var moved = false; private var longFired = false; private var lastTap = 0L
-        private val longPress = Runnable { longFired = true; toggleScroll() }
+        private val longPress = Runnable { longFired = true; openSettings() }
         private val singleTap = Runnable { onTap(false) }
 
         override fun onTouch(v: View, e: MotionEvent): Boolean {
@@ -201,7 +197,7 @@ class TranslateService : Service() {
     private fun onTap(claudeTap: Boolean) {
         if (busy) return
         val ov = overlay ?: return
-        if (!claudeTap && ov.showing && !scrollMode) { ov.clear(); return }   // 다시 탭하면 번역 지우기
+        if (!claudeTap && ov.showing) { ov.clear(); return }   // 다시 탭하면 번역 지우기
         if (claudeTap && !prefs.hasClaude) { toast("Claude 번역은 앱 설정에서 API 키를 넣어야 써요"); return }
         scope.launch { translateNow(claudeTap || prefs.engine == "claude") }
     }
@@ -210,7 +206,11 @@ class TranslateService : Service() {
         bubble?.text = text
         (bubble?.background as? GradientDrawable)?.setColor(color)
     }
-    private fun idleBubble() = if (scrollMode) setBubble("스", Color.argb(230, 30, 130, 255)) else setBubble("번", Color.argb(220, 255, 77, 46))
+    private fun idleBubble() = setBubble("번", Color.argb(220, 255, 77, 46))
+
+    private fun openSettings() {
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
 
     /** 번역 층과 버튼을 잠깐 숨기고 원래 화면만 캡처 */
     private suspend fun captureClean(): Bitmap? {
@@ -249,15 +249,20 @@ class TranslateService : Service() {
             val blocks = Ocr.recognize(bmp, bubbleRect)
             if (blocks.isEmpty()) {
                 overlay?.clear(); overlay?.visibility = View.VISIBLE
-                if (!scrollMode) toast("번역할 글자를 찾지 못했어요")
+                toast("번역할 글자를 찾지 못했어요")
                 bmp.recycle(); return
             }
+            var claudeErr = false
             if (useClaude && prefs.hasClaude) {
                 setBubble("C", Color.argb(230, 200, 120, 60))
                 try { claude.translate(blocks, if (prefs.sendImage) bmp else null) }
-                catch (e: Exception) { toast((e.message ?: "Claude 오류") + " — 무료 번역으로 대신해요") }
+                catch (e: Exception) { claudeErr = true; toast((e.message ?: "Claude 오류") + " — 무료 번역으로 대신해요") }
             }
             val rest = blocks.filter { it.ko.isNullOrBlank() }
+            // Claude가 번역하지 않은(거절 등) 칸은 무료 번역으로 채움
+            if (claudeErr) Unit
+            else if (useClaude && prefs.hasClaude && rest.isNotEmpty() && rest.size < blocks.size) toast("Claude가 번역하지 않은 ${rest.size}곳은 무료 번역으로 채웠어요")
+            else if (useClaude && prefs.hasClaude && rest.size == blocks.size) toast("Claude가 이 화면을 번역하지 않아서 무료 번역으로 보여줘요")
             if (rest.isNotEmpty()) {
                 setBubble("↓", Color.argb(230, 90, 90, 90))   // 무료 번역 (처음엔 언어 모델을 받느라 조금 걸림)
                 free.translate(rest)
@@ -271,64 +276,6 @@ class TranslateService : Service() {
         } finally {
             busy = false
             idleBubble()
-        }
-    }
-
-    // ---------- 스크롤 번역: 화면이 바뀌면 번역을 숨기고, 멈추면 다시 번역 ----------
-    private fun toggleScroll() {
-        scrollMode = !scrollMode
-        idleBubble()
-        scrollJob?.cancel()
-        if (scrollMode) {
-            toast("스크롤 번역 켜짐: 화면이 멈추면 자동으로 번역해요 (끄려면 다시 길게 누르기)")
-            scrollJob = scope.launch { scrollLoop() }
-        } else {
-            toast("스크롤 번역 꺼짐")
-        }
-    }
-
-    private fun signature(b: Bitmap): IntArray {
-        val gw = 24; val gh = 48; val s = IntArray(gw * gh)
-        for (y in 0 until gh) for (x in 0 until gw) {
-            val px = ((x + 0.5f) * b.width / gw).toInt().coerceIn(0, b.width - 1)
-            val py = ((y + 0.5f) * b.height / gh).toInt().coerceIn(0, b.height - 1)
-            val c = b.getPixel(px, py)
-            s[y * gw + x] = (Color.red(c) * 3 + Color.green(c) * 6 + Color.blue(c)) / 10
-        }
-        return s
-    }
-    private fun diff(a: IntArray?, b: IntArray?): Double {
-        if (a == null || b == null) return 999.0
-        var t = 0L; for (i in a.indices) t += abs(a[i] - b[i]); return t.toDouble() / a.size
-    }
-
-    private suspend fun scrollLoop() {
-        val useClaude = prefs.scrollWithClaude && prefs.hasClaude
-        translateNow(useClaude)
-        var baseline: IntArray? = null
-        var last: IntArray? = null
-        var changing = false
-        var stable = 0
-        delay(350)
-        while (scope.isActive && scrollMode) {
-            delay(450)
-            if (busy) continue
-            val b = grab()
-            val sig = if (b != null) signature(b).also { b.recycle() } else last
-            if (sig == null) continue
-            if (baseline == null) { baseline = sig; last = sig; continue }
-            if (!changing) {
-                if (diff(sig, baseline) > 6.0) { changing = true; stable = 0; overlay?.clear() }   // 움직이기 시작 → 번역 숨김
-            } else {
-                stable = if (diff(sig, last) < 1.5) stable + 1 else 0
-                if (stable >= 2) {                                                                 // 멈춤 → 다시 번역
-                    changing = false
-                    translateNow(useClaude)
-                    delay(350)
-                    baseline = null
-                }
-            }
-            last = sig
         }
     }
 
