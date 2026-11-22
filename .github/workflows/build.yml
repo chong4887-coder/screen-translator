@@ -19,7 +19,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # 깃허브 빌드 서버에는 안드로이드 SDK가 이미 설치돼 있음 (ANDROID_HOME)
+      - name: 안드로이드 SDK 확인
+        run: echo "ANDROID_HOME=$ANDROID_HOME" && ls $ANDROID_HOME/platforms | tail -3
 
       - uses: gradle/actions/setup-gradle@v4
         with:
